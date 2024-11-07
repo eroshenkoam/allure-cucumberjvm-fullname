@@ -11,15 +11,18 @@ import io.qameta.allure.testfilter.TestPlan;
 import io.qameta.allure.testfilter.TestPlanV1_0;
 import org.junit.platform.engine.FilterResult;
 import org.junit.platform.engine.TestDescriptor;
+import org.junit.platform.engine.TestTag;
 import org.junit.platform.engine.UniqueId;
 import org.junit.platform.launcher.PostDiscoveryFilter;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class AllurePostDiscoveryFilter implements PostDiscoveryFilter {
@@ -51,8 +54,9 @@ public class AllurePostDiscoveryFilter implements PostDiscoveryFilter {
         }
         final Optional<String> cucumberFullName = getCucumberFullName(object.getUniqueId());
         if (cucumberFullName.isPresent()) {
-            System.out.println(isIncluded(testPlan, "", fullNames.get(cucumberFullName.get())));
-            return FilterResult.included("hello");
+            final String allureId = findAllureId(object.getTags());
+            final boolean included = isIncluded(testPlan, allureId, fullNames.get(cucumberFullName.get()));
+            return FilterResult.includedIf(included);
         }
         return FilterResult.included("filter only applied for cucumber tests");
     }
@@ -92,6 +96,21 @@ public class AllurePostDiscoveryFilter implements PostDiscoveryFilter {
                           final String fullName) {
         return Objects.nonNull(tc.getId()) && tc.getId().equals(allureId)
                 || Objects.nonNull(tc.getSelector()) && tc.getSelector().equals(fullName);
+    }
+
+    private String findAllureId(final Collection<TestTag> tags) {
+        return tags.stream()
+                .map(TestTag::getName)
+                .map(t -> {
+                    final Matcher matcher = ID_TAG.matcher(t);
+                    return matcher.matches()
+                            ? Optional.ofNullable(matcher.group("id"))
+                            : Optional.<String>empty();
+                })
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .findAny()
+                .orElse(null);
     }
 
     private static Map<String, String> getFullNames() {
